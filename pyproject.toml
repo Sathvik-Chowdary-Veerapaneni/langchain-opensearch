@@ -1,0 +1,70 @@
+# This file configures the Python package build process and development tools.
+
+[project]
+# Core package metadata used by PyPI and installers.
+name = "langchain-opensearch"
+version = "0.1.0"  
+requires-python = ">=3.10,<4.0"  # Updated to support numpy>=2.1.0
+description = "LangChain integration package for OpenSearch Vector Store"
+readme = "README.md"
+authors = [
+    { name = "Sathvik-Chowdary-Veerapaneni", email = "sathvikchowdaryveerapaneni@gmail.com" }
+]
+license = { text = "MIT" }
+keywords = ["langchain", "opensearch", "vectorstore", "ai", "search"]
+
+# Runtime dependencies required for the package to function.
+dependencies = [
+    "opensearch-py>=2.4.0,<3.0.0",
+    "langchain-core>=0.3.55,<0.4.0",
+    "langchain-community>=0.3.0,<0.4.0",
+    "numpy>=2.1.0,<3.0.0",
+    "typing-extensions>=4.8.0,<5.0.0",
+]
+
+# Optional dependencies for PyPI users (e.g., for running tests).
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0.0,<8.0.0",
+    "pytest-mock>=3.10.0,<4.0.0",
+    "pytest-cov>=4.0.0,<5.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Sathvik-Chowdary-Veerapaneni/langchain-opensearch"
+Repository = "https://github.com/Sathvik-Chowdary-Veerapaneni/langchain-opensearch"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP"]
+ignore = [
+    "E501",  # Line length (handled by Black).
+    "B904",  # Exception handling (to be fixed in code).
+    "UP007",  # Modern typing (to be fixed in code).
+    "C408",  # Simpler literals (to be fixed in code).
+    "C416",  # Simpler comprehensions (to be fixed in code).
+    "B028",  # Warning stacklevel (to be fixed in code).
+    # TODO: Address these linting issues in code and re-enable rules.
+]
+
+[tool.black]
+line-length = 88
+
+[tool.mypy]
+ignore_missing_imports = true  # Consider revisiting to address third-party type hints.
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+addopts = "-vv --cov=langchain_opensearch --cov-report=term-missing"
+python_files = "tests/*.py"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0"
+pytest-mock = "^3.10"
+pytest-cov = "^4.0"
+ruff = "^0.6"
+black = "^24.8"
+mypy = "^1.11"
