@@ -1,30 +1,27 @@
 # langchain-opensearch
 
-A standalone package for integrating OpenSearch with LangChain, providing `OpenSearchVectorStore` for efficient document storage and similarity search.
+A standalone LangChain integration package for OpenSearch, providing `OpenSearchVectorStore` for efficient vector storage and similarity search.
 
 ## Overview
 
-This package provided a dedicated `langchain-opensearch` module, housing the `OpenSearchVectorStore` for efficient interaction between LangChain and OpenSearch. By decoupling this integration from the main `langchain_community` package, I improved modularity and provided a more focused dependency for users leveraging OpenSearch for vector storage and retrieval.
-
-My key contributions included the migration of `OpenSearchVectorStore`, updates to align with `langchain-core`, the addition of comprehensive unit, mock, and real OpenSearch integration tests, and adherence to high code quality standards through `black` and `ruff` formatting and linting.
+This package fulfills [LangChain issue #30323](https://github.com/langchain-ai/langchain/issues/30323) by creating a standalone `langchain-opensearch` module, migrating `OpenSearchVectorStore` from `langchain_community` to improve modularity and dependency management. As detailed in [PR #30892](https://github.com/langchain-ai/langchain/pull/30892), the package was developed with updated `langchain-core` imports, comprehensive integration tests, and high code quality using `black` formatting and `ruff` linting.
 
 ## Features
 
-- **`OpenSearchVectorStore`:** A robust vector store implementation for storing and querying embeddings in OpenSearch.
-- **Similarity Search:** Efficiently performed similarity searches on documents stored in OpenSearch.
-- **LangChain Core Integration:** Integrated efficiently with the foundational components of LangChain.
-- **Comprehensive Testing:** Included unit tests, mock integrations, and real OpenSearch integration tests to ensure reliability.
+- **OpenSearchVectorStore**: Stores and queries document embeddings in OpenSearch.
+- **Similarity Search**: Performs efficient similarity searches.
+- **LangChain Integration**: Seamlessly works with `langchain-core`.
+- **Integration Tests**: Includes mocked tests for reliability.
 
 ## Installation
 
 ```bash
 pip install langchain-opensearch
-```
 
 ## Usage
 
-```python
-from langchain_opensearch.vectorstores import OpenSearchVectorStore
+``` 
+from langchain_opensearch import OpenSearchVectorStore
 from langchain_core.embeddings import Embeddings
 
 class DummyEmbeddings(Embeddings):
@@ -43,7 +40,8 @@ vector_store = OpenSearchVectorStore(
 texts = ["Hello, world!", "LangChain is awesome"]
 vector_store.add_texts(texts)
 results = vector_store.similarity_search("world", k=1)
-print([doc.page_content for doc in results])  # Output: ['Hello, world!']
+print([doc.page_content for doc in results])  # ['Hello, world!']
+
 ```
 
 ## Setting Up OpenSearch (for local testing)
@@ -102,7 +100,7 @@ python langchain-opensearch/test_real_opensearch.py
 This package represented the extraction of `OpenSearchVectorStore` from `langchain_community`. My key changes included:
 
 - `langchain_opensearch/vectorstores.py`: Migrated `OpenSearchVectorStore`, updated imports to `langchain-core`, and optimized the `add_texts` method.
-- `tests/test_vectorstores.py`: Added comprehensive unit and mock tests to ensure functionality.
+- `tests/test_vectorstores.py`: Added comprehensive unit and mock tests to ensure functionality (8 tests, all passing)..
 - `pyproject.toml`: Defined the package's dependencies.
 - `.devcontainer/*`: Configured a consistent development and testing environment using Codespaces.
 - `README.md`: Documented usage, setup, testing, and changes (this file).

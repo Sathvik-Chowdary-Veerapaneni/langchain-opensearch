@@ -68,3 +68,10 @@ pytest-cov = "^4.0"
 ruff = "^0.6"
 black = "^24.8"
 mypy = "^1.11"
+
+
+[tool.poetry]
+packages = [
+    { include = "langchain_opensearch" }
+]
+exclude = ["tests", ".devcontainer"]
