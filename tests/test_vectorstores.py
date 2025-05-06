@@ -1,206 +1,217 @@
-# import unittest
-# from unittest.mock import MagicMock, patch
-# from typing import TYPE_CHECKING, Callable, Any
-
-# from langchain_core.embeddings import Embeddings
-
-# from langchain_opensearch.vectorstores import OpenSearchVectorStore
-
-# try:
-#     from opensearchpy.helpers import bulk as opensearch_bulk_helper
-# except ImportError:
-#     opensearch_bulk_helper = None
-
-
-# class TestOpenSearchVectorStore(unittest.TestCase):
-#     def test_import(self):None
-#         """Test that the OpenSearchVectorStore class can be imported."""
-#         self.assertTrue(hasattr(OpenSearchVectorStore, "add_texts"))
-
-#     @patch("opensearchpy.helpers.bulk")
-#     def test_add_texts_mock(self, mock_bulk_helper):None
-#         """Test add_texts, mocking the opensearchpy bulk helper."""
-#         mock_client = MagicMock()
-#         mock_embeddings = MagicMock(spec=Embeddings)
-#         mock_embeddings.embed_documents.return_value = [[0.1, 0.2], [0.3, 0.4]]
-
-#         vector_store = OpenSearchVectorStore(
-#             client=mock_client,
-#             index_name="test_index",
-#             embedding_function=mock_embeddings,
-#         )
-
-#         texts = ["Hello", "World"]
-#         vector_store.add_texts(texts)
-
-#         mock_embeddings.embed_documents.assert_called_once_with(texts)
-#         mock_bulk_helper.assert_called_once()
-
-#         args, kwargs = mock_bulk_helper.call_args
-#         self.assertIs(args[0], mock_client)
-#         self.assertEqual(len(args[1]), len(texts))
-#         self.assertEqual(args[1][0]["_op_type"], "index")
-#         self.assertIn("_source", args[1][0])
-#         self.assertEqual(args[1][0]["_source"]["text"], texts[0])
-
-#     def test_similarity_search_mock(self):None
-#         """Test similarity_search with mocked client."""
-#         mock_client = MagicMock()
-#         mock_client.search.return_value = {
-#             "hits": {
-#                 "hits": [
-#                     {"_id": "test_id", "_source": {"text": "Hello"}, "_score": 0.9}
-#                 ]
-#             }
-#         }
-#         mock_embeddings = MagicMock(spec=Embeddings)
-#         mock_embeddings.embed_query.return_value = [0.1, 0.2]
-
-#         vector_store = OpenSearchVectorStore(
-#             client=mock_client,
-#             index_name="test_index",
-#             embedding_function=mock_embeddings,
-#         )
-
-#         results = vector_store.similarity_search("test query", k=1)
-#         mock_embeddings.embed_query.assert_called_once_with("test query")
-#         mock_client.search.assert_called_once()
-#         self.assertEqual(len(results), 1)
-#         self.assertEqual(results[0].page_content, "Hello")
-
-
-# if __name__ == "__main__":
-#     unittest.main()
-
-
 from __future__ import annotations
-
 import unittest
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
-from unittest.mock import MagicMock, patch
+from typing import TYPE_CHECKING, Any, Optional
+from unittest.mock import MagicMock, patch, call
+import numpy as np
+import pytest # Import pytest
 
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 
-from langchain_opensearch.vectorstores import OpenSearchVectorStore
-
-# Define a type alias for the bulk helper function
-BulkHelperType = Callable[..., Any]
-
-if TYPE_CHECKING:
-    # This block is only evaluated by type checkers (e.g., MyPy)
-    try:
-        from opensearchpy.helpers import bulk as opensearch_bulk_helper_real
-
-        opensearch_bulk_helper: BulkHelperType | None = opensearch_bulk_helper_real
-    except ImportError:
-        # If import fails for type checker, define as None
-        opensearch_bulk_helper = None
-else:
-    # This block is executed at runtime
-    try:
-        from opensearchpy.helpers import bulk as opensearch_bulk_helper_real
-
-        opensearch_bulk_helper: BulkHelperType | None = opensearch_bulk_helper_real
-    except ImportError:
-        # Assign None at runtime if import fails
-        opensearch_bulk_helper = None
+try:
+    from opensearchpy import OpenSearch
+    from opensearchpy import AsyncOpenSearch
+    from opensearchpy.helpers import bulk as opensearch_bulk_helper_real
+    # Async bulk helper is not used in this minimal set, but keep for robustness
+    from opensearchpy.helpers import async_bulk as opensearch_async_bulk_helper_real
+except ImportError:
+    # Provide dummy classes/values if opensearch-py is not installed
+    OpenSearch = MagicMock()
+    AsyncOpenSearch = MagicMock()
+    opensearch_bulk_helper_real = None
+    opensearch_async_bulk_helper_real = None
 
 
-class TestOpenSearchVectorStore(unittest.TestCase):
+# Import only the necessary functions from your package for this minimal test set
+from langchain_opensearch.vectorstores import (
+    OpenSearchVectorStore,
+    _get_opensearch_client, # For dependency error testing
+    _get_async_opensearch_client, # For dependency error testing
+    # Only import helpers if they are directly tested, not if they are patched by public methods
+    # _validate_embeddings_and_bulk_size, # Excluded from minimal set
+    # _is_aoss_enabled, # Excluded from minimal set
+    # _validate_aoss_with_engines, # Excluded from minimal set
+)
+
+# Define these based on real imports or None for conditional skipping
+opensearch_bulk_helper: Callable[..., Any] | None = opensearch_bulk_helper_real
+
+
+# Use pytest.mark.asyncio just in case, even if no async tests included
+pytestmark = pytest.mark.asyncio
+
+
+# --- Minimal Test Class focusing on Issue/PR Core Requirements ---
+class TestOpenSearchVectorStoreMinimal(unittest.TestCase):
+
     def test_import(self) -> None:
         """Test that the OpenSearchVectorStore class can be imported."""
+        self.assertTrue(hasattr(OpenSearchVectorStore, "__init__"))
+        # Check the explicitly mentioned core methods
         self.assertTrue(hasattr(OpenSearchVectorStore, "add_texts"))
+        self.assertTrue(hasattr(OpenSearchVectorStore, "similarity_search"))
 
-    # @patch("langchain_opensearch.vectorstores._bulk_ingest_embeddings")
-    @patch("opensearchpy.helpers.bulk")
-    def test_add_texts_mock(self, mock_bulk_helper: MagicMock) -> None:
-        """Test add_texts method with a mocked OpenSearch bulk helper."""
-        if opensearch_bulk_helper is None:
-            self.skipTest("opensearchpy.helpers.bulk not available")
 
-        # Create mock objects
-        mock_client = MagicMock()
+    # Test basic Initialization paths (client, url, and the error case)
+    def test_init_with_client(self) -> None:
+        """Test __init__ successfully sets client when provided."""
+        mock_client = MagicMock(spec=OpenSearch)
         mock_embeddings = MagicMock(spec=Embeddings)
-        mock_embeddings.embed_documents.return_value = [[0.1, 0.2], [0.3, 0.4]]
+        index_name = "test_index"
 
-        # Initialize the vector store
-        vector_store = OpenSearchVectorStore(
+        store = OpenSearchVectorStore(
             client=mock_client,
-            index_name="test_index",
+            index_name=index_name,
             embedding_function=mock_embeddings,
         )
+        self.assertIs(store.client, mock_client)
+        self.assertIsNone(store.async_client) # Should not initialize async if client is provided
+        self.assertEqual(store.index_name, index_name)
+        self.assertIs(store.embedding_function, mock_embeddings)
 
-        # Test adding texts
+    # Patch the helper functions that __init__ calls when url is provided
+    @patch("langchain_opensearch.vectorstores._get_async_opensearch_client")
+    @patch("langchain_opensearch.vectorstores._get_opensearch_client")
+    # Patch is_aoss_enabled as it's called by __init__
+    @patch("langchain_opensearch.vectorstores._is_aoss_enabled", return_value=False) # Assume non-AOSS for minimal case
+    def test_init_with_url(
+        self, mock_is_aoss_enabled: MagicMock, mock_get_sync_client: MagicMock, mock_get_async_client: MagicMock
+    ) -> None:
+        """Test __init__ successfully creates clients when opensearch_url is provided."""
+        mock_sync_client_instance = MagicMock(spec=OpenSearch)
+        # Return dummy clients from the patched getters
+        mock_get_sync_client.return_value = mock_sync_client_instance
+        mock_get_async_client.return_value = MagicMock(spec=AsyncOpenSearch) # Still needs to be called
+
+
+        mock_embeddings = MagicMock(spec=Embeddings)
+        index_name = "test_index"
+        opensearch_url = "http://my-os:9200"
+        # Pass minimal kwargs needed by __init__
+        extra_kwargs = {"timeout": 60} # Example kwarg that might be passed to getters
+
+        store = OpenSearchVectorStore(
+            index_name=index_name,
+            embedding_function=mock_embeddings,
+            opensearch_url=opensearch_url,
+            **extra_kwargs # Pass kwargs
+        )
+
+        # Assert getters were called with URL and kwargs
+        mock_get_sync_client.assert_called_once_with(opensearch_url, **extra_kwargs)
+        mock_get_async_client.assert_called_once_with(opensearch_url, **extra_kwargs)
+
+        # Assert clients are set
+        self.assertIs(store.client, mock_sync_client_instance)
+        self.assertIsInstance(store.async_client, MagicMock) # Check it's a mock async client
+
+        # Assert is_aoss check was made
+        mock_is_aoss_enabled.assert_called_once()
+
+
+    def test_init_raises_error_if_no_client_or_url(self) -> None:
+        """Test __init__ raises ValueError if neither client nor opensearch_url is provided."""
+        expected_message = "Either 'client' or 'opensearch_url' must be provided."
+        mock_embeddings = MagicMock(spec=Embeddings)
+        with pytest.raises(ValueError, match=expected_message):
+            OpenSearchVectorStore(index_name="test_index", embedding_function=mock_embeddings)
+
+
+    # Test Dependency Import Errors for client getters
+    @patch("opensearchpy.OpenSearch", side_effect=ImportError("test ImportError"))
+    def test_get_opensearch_client_import_error(self, mock_opensearch_class: MagicMock) -> None:
+        """Test _get_opensearch_client raises ImportError if opensearch-py sync client is not installable."""
+        url = "http://dummy-url:9200"
+        with pytest.raises(ImportError, match="Could not import OpenSearch"):
+            _get_opensearch_client(url)
+        mock_opensearch_class.assert_called_once_with(url) # Check URL is passed to the attempt
+
+
+    @patch("opensearchpy.AsyncOpenSearch", side_effect=ImportError("test ImportError"))
+    def test_get_async_opensearch_client_import_error(self, mock_async_opensearch_class: MagicMock) -> None:
+        """Test _get_async_opensearch_client raises ImportError if opensearch-py async client is not installable."""
+        url = "http://dummy-url:9200"
+        with pytest.raises(ImportError, match="Could not import AsyncOpenSearch"):
+            _get_async_opensearch_client(url)
+        mock_async_opensearch_class.assert_called_once_with(url)
+
+
+    # Test add_texts method (calls internal __add)
+    # Patch the internal __add method (name mangled)
+    @patch.object(OpenSearchVectorStore, "_OpenSearchVectorStore__add", return_value=["mock_id1", "mock_id2"])
+    def test_add_texts_mock(self, mock_add: MagicMock) -> None:
+        """Test add_texts calls internal __add helper correctly after embedding."""
+        mock_client = MagicMock(spec=OpenSearch)
+        mock_embeddings = MagicMock(spec=Embeddings)
         texts = ["Hello", "World"]
-        vector_store.add_texts(texts)
+        embeddings_list = [[0.1, 0.2], [0.3, 0.4]]
+        mock_embeddings.embed_documents.return_value = embeddings_list # Mock embedding call
 
-        # Assertions
+        vector_store = OpenSearchVectorStore(client=mock_client, index_name="test_index", embedding_function=mock_embeddings)
+
+        metadatas = [{"a": 1}, {"b": 2}]
+        ids = ["id1", "id2"]
+
+        result_ids = vector_store.add_texts(texts, metadatas=metadatas, ids=ids)
+
+        # Assert embedding function was called
         mock_embeddings.embed_documents.assert_called_once_with(texts)
-        mock_bulk_helper.assert_called_once()
 
-        # Check arguments passed to the mock bulk helper
-        args, kwargs = mock_bulk_helper.call_args
-        self.assertIs(args[0], mock_client)  # First arg should be the client
-        actions = args[1]  # Second arg should be the list of actions
-        self.assertEqual(len(actions), len(texts))
-        self.assertEqual(actions[0]["_op_type"], "index")
-        self.assertIn("_source", actions[0])
-        self.assertEqual(actions[0]["_source"]["text"], texts[0])
-        self.assertIn("vector_field", actions[0]["_source"])
-        self.assertEqual(len(actions[0]["_source"]["vector_field"]), 2)
+        # Assert internal __add helper was called with correct args
+        # __add expects texts as Iterable, embeddings as list, metadatas, ids, bulk_size, and other kwargs
+        mock_add.assert_called_once()
+        # add_texts converts iterable texts to list and passes embeddings, metadatas, ids
+        expected_add_args = (list(texts), embeddings_list)
+        # add_texts passes metadatas, ids, and default bulk_size as kwargs
+        expected_add_kwargs = {"metadatas": metadatas, "ids": ids, "bulk_size": 500} # Check default bulk_size
 
-    def test_similarity_search_mock(self) -> None:
-        """Test similarity_search method with a mocked client."""
-        # Create mock objects
-        mock_client = MagicMock()
-        mock_client.search.return_value = {
-            "hits": {
-                "total": {"value": 1, "relation": "eq"},
-                "max_score": 0.9,
-                "hits": [
-                    {
-                        "_index": "test_index",
-                        "_id": "test_id",
-                        "_score": 0.9,
-                        "_source": {
-                            "text": "Hello",
-                            "vector_field": [0.5, 0.6],
-                            "metadata": {"source": "doc1"},
-                        },
-                    }
-                ],
-            }
-        }
+        # Use call() to compare arguments explicitly
+        mock_add.assert_called_once_with(*expected_add_args, **expected_add_kwargs)
+
+        # Check the return value
+        self.assertEqual(result_ids, ["mock_id1", "mock_id2"])
+
+
+    # Test similarity_search method (calls embed_query and internal _raw_similarity_search_with_score_by_vector)
+    # Patch the internal _raw_similarity_search_with_score_by_vector method (name mangled if private)
+    # Assuming _raw_similarity_search_with_score_by_vector is public or needs patching by name
+    @patch.object(OpenSearchVectorStore, "_raw_similarity_search_with_score_by_vector")
+    def test_similarity_search_mock(self, mock_raw_search: MagicMock) -> None:
+        """Test similarity_search calls embed_query and _raw_similarity_search_with_score_by_vector correctly."""
         mock_embeddings = MagicMock(spec=Embeddings)
-        mock_embeddings.embed_query.return_value = [0.1, 0.2]
+        query_vector = [0.1, 0.2]
+        mock_embeddings.embed_query.return_value = query_vector # Mock embedding call
 
-        # Initialize the vector store
-        vector_store = OpenSearchVectorStore(
-            client=mock_client,
-            index_name="test_index",
-            embedding_function=mock_embeddings,
+        # Mock return value from _raw_similarity_search_with_score_by_vector
+        # Should be a list of dicts representing search hits
+        mock_raw_search.return_value = [{
+             "_id": "test_id", "_score": 0.9,
+             "_source": {"text": "Hello", "metadata": {"source": "doc1"}} # Include minimal source fields
+        }]
+
+        vector_store = OpenSearchVectorStore(client=MagicMock(spec=OpenSearch), index_name="test_index", embedding_function=mock_embeddings)
+
+        query = "test query"
+        k_value = 1
+
+        results = vector_store.similarity_search(query, k=k_value)
+
+        # Assert embedding function was called
+        mock_embeddings.embed_query.assert_called_once_with(query)
+
+        # Assert internal raw search helper was called with correct args
+        # similarity_search calls similarity_search_with_score, which calls _raw_...
+        # Check args passed to _raw_...
+        mock_raw_search.assert_called_once_with(
+            embedding=query_vector, # The embedding is passed
+            k=k_value,
+            score_threshold=0.0, # Check default threshold
+            query_text=query, # query_text is added by similarity_search_with_score
+            # Check for other kwargs passed from similarity_search if any
         )
 
-        # Test similarity search
-        query = "test query"
-        results = vector_store.similarity_search(query, k=1)
-
-        # Assertions
-        mock_embeddings.embed_query.assert_called_once_with(query)
-        mock_client.search.assert_called_once()
-
-        # Check the search query passed to the mock client
-        args, kwargs = mock_client.search.call_args
-        self.assertEqual(kwargs.get("index"), "test_index")
-
-        # Check the results
+        # Check the final results format (List of Documents)
         self.assertEqual(len(results), 1)
         self.assertIsInstance(results[0], Document)
         self.assertEqual(results[0].page_content, "Hello")
-        self.assertEqual(results[0].metadata, {"source": "doc1"})
-
-
-if __name__ == "__main__":
-    unittest.main()
+        self.assertEqual(results[0].metadata, {"source": "doc1"}) # Check metadata is parsed correctly

@@ -1346,9 +1346,8 @@ class OpenSearchVectorStore(VectorStore):
         embedding = self.embedding_function.embed_query(query)
 
         # Do ANN/KNN search to get top fetch_k results where fetch_k >= k
-        results = self._raw_similarity_search_with_score_by_vector(
-            embedding, fetch_k, **kwargs
-        )
+
+        results = self._raw_similarity_search_with_score_by_vector(embedding=embedding,k=fetch_k,**kwargs)
 
         embeddings = [result["_source"][vector_field] for result in results]
 
